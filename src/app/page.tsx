@@ -7,6 +7,12 @@ import { PurchasePanel } from '@/components/PurchasePanel';
 import { AnimatedCounter } from '@/components/AnimatedCounter';
 import { RecentPurchasesFeed } from '@/components/RecentPurchasesFeed';
 import { HeatmapLegend } from '@/components/HeatmapLegend';
+import { DEMO_ADS, getDemoPixels, getLargestDemoAd } from '@/lib/demo-ads';
+import {
+  getDisplayStats,
+  PIXELS_DISPLAY_PURCHASES_THRESHOLD,
+  shouldShowPurchasedPixelsOnWall,
+} from '@/lib/launch-simulation';
 
 type Ad = {
   id: string;
@@ -28,16 +34,17 @@ type Stats = {
 };
 
 const HOW_IT_WORKS = [
-  { step: '1', title: 'Choisissez vos pixels', desc: 'Sélectionnez la zone sur le mur. Centre (5 $/px), milieu (2 $/px) ou périphérie (1 $/px).' },
-  { step: '2', title: 'Ajoutez votre logo et votre lien', desc: 'Nom, URL et image. Votre annonce sera visible par des milliers de visiteurs.' },
-  { step: '3', title: 'Votre publicité apparaît sur le mur', desc: 'Paiement sécurisé via Stripe. Votre pixel reste affiché en permanence.' },
+  { step: '1', title: 'Choisissez vos pixels', desc: 'Sélectionnez une zone sur le mur. 1 pixel = 1 €, 1 bloc (10×10) = 100 €. Le mur complet vaut 1 000 000 €.' },
+  { step: '2', title: 'Ajoutez votre logo et lien', desc: 'Nom, URL et image. Votre annonce sera visible par des milliers de visiteurs, pour toujours.' },
+  { step: '3', title: 'Paiement sécurisé', desc: 'Stripe sécurise votre paiement. Votre pixel reste affiché en permanence sur le mur.' },
 ];
 
 const FAQ_ITEMS = [
-  { q: 'Combien coûtent les pixels ?', a: 'Le prix dépend de la zone : centre 5 $/pixel, zone intermédiaire 2 $/pixel, périphérie 1 $/pixel. Le récapitulatif affiche toujours le total exact avant paiement.' },
-  { q: 'Les pixels restent-ils pour toujours ?', a: 'Oui. Une fois achetés, vos pixels restent affichés sur le mur de manière permanente. C\'est un véritable morceau d\'Internet.' },
-  { q: 'Puis-je modifier mon image ?', a: 'Pour l\'instant, l\'achat est définitif. Nous travaillons sur des options de mise à jour pour les annonceurs.' },
-  { q: 'Pourquoi acheter tôt ?', a: 'Les meilleurs emplacements (centre) sont limités et partent en premier. Les pixels au centre deviennent rares et ont le plus de valeur.' },
+  { q: 'Combien coûtent les pixels ?', a: '1 pixel = 1 €. Les pixels sont regroupés en blocs de 10×10 (100 pixels), donc 1 bloc = 100 €. Le récapitulatif affiche toujours le total exact avant paiement. Exemple : 5 blocs = 500 pixels = 500 €.' },
+  { q: 'Les pixels restent-ils pour toujours ?', a: 'Oui. Une fois achetés, vos pixels restent affichés sur le mur de manière permanente. C\'est un véritable bien numérique sur Internet.' },
+  { q: 'Puis-je modifier mon image après achat ?', a: 'L\'achat est définitif pour l\'instant. Nous travaillons sur des options de mise à jour pour les annonceurs existants.' },
+  { q: 'Pourquoi acheter maintenant ?', a: 'Le mur affiche 1 000 000 pixels à 1 € l\'un. Les emplacements partent au fur et à mesure ; réservez votre zone avant qu\'elle ne soit prise.' },
+  { q: 'Le paiement est-il sécurisé ?', a: 'Oui. Nous utilisons Stripe pour tous les paiements. Aucune donnée bancaire ne transite par nos serveurs.' },
 ];
 
 function timeAgo(dateStr: string): string {
@@ -52,6 +59,8 @@ function timeAgo(dateStr: string): string {
   return `il y a ${day} jour${day > 1 ? 's' : ''}`;
 }
 
+const CONTACT_EMAIL = 'contact@milliondollarpixel.com';
+
 export default function HomePage() {
   const [ads, setAds] = useState<Ad[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -60,6 +69,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
   const [tickerKey, setTickerKey] = useState(0);
+  /** Force le recalcul de timeAgo (ticker + derniers achats). */
+  const [, setRelativeTimeTick] = useState(0);
   const wallRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<HTMLElement[]>([]);
 
@@ -86,9 +97,17 @@ export default function HomePage() {
   }, [fetchAds, fetchStats]);
 
   useEffect(() => {
-    const id = setInterval(fetchStats, 30_000);
+    const id = setInterval(() => {
+      fetchStats();
+      fetchAds();
+    }, 30_000);
     return () => clearInterval(id);
-  }, [fetchStats]);
+  }, [fetchStats, fetchAds]);
+
+  useEffect(() => {
+    const id = setInterval(() => setRelativeTimeTick((n) => n + 1), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -107,7 +126,7 @@ export default function HomePage() {
           if (entry.isIntersecting) entry.target.classList.add('reveal-visible');
         });
       },
-      { threshold: 0.08, rootMargin: '0px 0px -40px 0px' }
+      { threshold: 0.06, rootMargin: '0px 0px -50px 0px' }
     );
     sectionRefs.current.forEach((el) => el && observer.observe(el));
     return () => observer.disconnect();
@@ -127,12 +146,29 @@ export default function HomePage() {
     wallRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const lastPurchases = ads.slice(0, 5);
-  const topAdvertisers = [...ads]
-    .sort((a, b) => (b.width * b.height) - (a.width * a.height))
+  const lastPurchases = [...ads]
+    .sort((a, b) => {
+      const ta = a.purchase_date ? new Date(a.purchase_date).getTime() : 0;
+      const tb = b.purchase_date ? new Date(b.purchase_date).getTime() : 0;
+      return tb - ta;
+    })
     .slice(0, 5);
   const featuredAds = ads.filter((a) => a.image_url).slice(0, 8);
-  const lastAd = ads[0];
+  const lastAd = lastPurchases[0] ?? null;
+  const displayStats = getDisplayStats(stats ?? null);
+  const showPurchasedPixelsOnWall = shouldShowPurchasedPixelsOnWall(displayStats.totalPixelsSold);
+  const biggestBuyer =
+    [...ads].sort((a, b) => b.width * b.height - a.width * a.height)[0] ?? null;
+  const biggestBuyerPixels = biggestBuyer
+    ? biggestBuyer.width * biggestBuyer.height * 100
+    : 0;
+  const largestDemoAd = getLargestDemoAd(DEMO_ADS);
+  const largestDemoPixels = largestDemoAd ? getDemoPixels(largestDemoAd) : 0;
+  /** Démo comptée en anonyme si elle dépasse le plus gros achat réel, ou s’il n’y a pas encore d’achat réel. */
+  const showAnonymousDemoLeader =
+    largestDemoPixels > 0 &&
+    (largestDemoPixels > biggestBuyerPixels || !biggestBuyer);
+  const showRealLeader = biggestBuyer && !showAnonymousDemoLeader;
 
   const formatDate = (dateStr?: string) => {
     if (!dateStr) return '—';
@@ -140,89 +176,226 @@ export default function HomePage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0b0b0f] text-zinc-100">
-      <header className="border-b border-white/[0.06] sticky top-0 z-40 bg-[#0b0b0f]/95 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
-          <h1 className="text-lg font-bold tracking-tight text-white">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--foreground)]">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-xl">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+          <Link href="/" className="text-xl font-bold tracking-tight text-white">
             Million Dollar Pixel
-          </h1>
-          <nav className="flex items-center gap-3">
-            <Link href="/annonceurs" className="text-sm text-zinc-400 hover:text-white transition-colors">
+          </Link>
+          <nav className="flex items-center gap-2 sm:gap-4">
+            <Link href="/advertisers" className="text-sm text-zinc-400 hover:text-white transition-colors py-2 px-3 rounded-lg hover:bg-white/5">
               Annonceurs
             </Link>
-            <a href="/admin" className="text-sm text-zinc-400 hover:text-white transition-colors">
+            <a href="/admin" className="text-sm text-zinc-400 hover:text-white transition-colors py-2 px-3 rounded-lg hover:bg-white/5 hidden sm:inline">
               Admin
             </a>
             <button
               type="button"
               onClick={() => setSelectionMode((m) => !m)}
-              className={`rounded-2xl px-4 py-2.5 text-sm font-medium transition-all ${
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition-all ${
                 selectionMode
-                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shadow-[0_0_20px_-4px_rgba(34,197,94,0.3)]'
-                  : 'bg-white/5 text-zinc-300 hover:bg-white/10 border border-white/10'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 shadow-[0_0_24px_-4px_rgba(16,185,129,0.35)]'
+                  : 'btn-secondary text-zinc-300 hover:text-white'
               }`}
             >
-              {selectionMode ? 'Sélection en cours…' : 'Sélectionner des pixels'}
+              {selectionMode ? 'Sélection en cours' : 'Acheter des pixels'}
             </button>
           </nav>
         </div>
       </header>
 
       <main>
-        {/* Hero */}
-        <section className="relative overflow-hidden border-b border-white/[0.06]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(34,197,94,0.1),transparent)]" />
-          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.03] via-transparent to-transparent" />
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-24 text-center">
-            <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold text-white tracking-tight animate-fade-in-up leading-[1.1]">
+        {/* Hero - compact so wall is visible quickly */}
+        <section className="relative overflow-hidden border-b border-[var(--border)]">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-30%,rgba(16,185,129,0.12),transparent_50%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.04] via-transparent to-transparent" />
+          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14 text-center">
+            <p className="text-sm font-medium text-emerald-400/90 uppercase tracking-widest mb-4 animate-fade-in-up">
+              Le mur de pixels le plus connu d&apos;Internet
+            </p>
+            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white tracking-tight animate-fade-in-up animate-fade-in-up-delay-1 leading-[1.05]">
               Possédez un morceau d&apos;internet.
             </h2>
-            <p className="mt-5 text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto animate-fade-in-up animate-fade-in-up-delay-1 whitespace-pre-line">
-              1 000 000 pixels à vendre.{'\n'}
-              Affichez votre marque, votre projet ou votre site sur un mur public permanent.
+            <p className="mt-6 text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed animate-fade-in-up animate-fade-in-up-delay-2">
+              1 000 000 pixels à vendre. Affichez votre marque, votre projet ou votre site sur un mur public permanent — pour toujours.
             </p>
-            <div className="mt-10 flex flex-wrap items-center justify-center gap-4 animate-fade-in-up animate-fade-in-up-delay-3">
+            <p className="mt-3 text-sm font-medium text-zinc-500 animate-fade-in-up animate-fade-in-up-delay-2">
+              1 pixel = 1 € · 1 bloc (10×10) = 100 € · Mur complet = 1 000 000 €
+            </p>
+            <div className="mt-10 flex flex-wrap items-center justify-center gap-3 sm:gap-4 animate-fade-in-up animate-fade-in-up-delay-3">
               <button
                 type="button"
                 onClick={scrollToPurchase}
-                className="cta-primary rounded-2xl px-8 py-3.5 font-semibold text-white flex items-center gap-2"
+                className="cta-primary rounded-xl px-8 py-4 font-semibold text-white flex items-center gap-2 text-base"
               >
-                <span>🚀</span> Acheter des pixels
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m-3-2h6m-6 0h6" /></svg>
+                Acheter des pixels
               </button>
               <button
                 type="button"
                 onClick={scrollToWall}
-                className="rounded-2xl border border-white/15 bg-white/5 px-8 py-3.5 font-medium text-white hover:bg-white/10 hover:border-white/20 transition-all btn-lift flex items-center gap-2"
+                className="btn-secondary rounded-xl px-8 py-4 font-semibold text-white flex items-center gap-2 text-base btn-lift"
               >
-                <span>👀</span> Explorer le mur
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                Explorer le mur
               </button>
             </div>
-            <p className="mt-4 text-sm text-emerald-400/90 animate-fade-in-up animate-fade-in-up-delay-4">
-              Les meilleurs emplacements partent en premier.
+            <p className="mt-5 text-sm font-medium text-zinc-500 animate-fade-in-up animate-fade-in-up-delay-4">
+              Les meilleurs emplacements partent en premier. Réservez votre zone avant qu&apos;elle ne soit prise.
             </p>
-            {stats && stats.pixelsRemaining < 1_000_000 && (
-              <p className="mt-2 text-sm text-amber-400/90 animate-fade-in-up animate-fade-in-up-delay-4">
-                Plus que <strong>{stats.pixelsRemaining.toLocaleString('fr-FR')}</strong> pixels disponibles.
+            {displayStats.pixelsRemaining < 1_000_000 && (
+              <p className="mt-2 text-sm text-amber-400/95 font-medium animate-fade-in-up animate-fade-in-up-delay-4">
+                Plus que <strong className="text-white">{displayStats.pixelsRemaining.toLocaleString('fr-FR')}</strong> pixels disponibles
               </p>
             )}
-            {/* Live stats */}
-            <div className="mt-14 animate-fade-in-up animate-fade-in-up-delay-5">
-              <div className="flex items-center justify-center gap-2 mb-4">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-                <span className="text-xs text-zinc-500 uppercase tracking-wider">En direct</span>
+
+            {/* Plus gros acheteur */}
+            <div className="mt-12 animate-fade-in-up animate-fade-in-up-delay-4">
+              <div className="inline-flex flex-col sm:flex-row items-stretch sm:items-center gap-5 sm:gap-8 rounded-2xl border border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.12] via-teal-500/[0.06] to-transparent px-6 sm:px-8 py-5 shadow-[0_0_48px_-12px_rgba(16,185,129,0.22)] max-w-2xl mx-auto w-full">
+                {showAnonymousDemoLeader ? (
+                  <>
+                    <div className="flex items-center gap-4 text-center sm:text-left flex-1 min-w-0">
+                      <span className="text-4xl flex-shrink-0" aria-hidden>
+                        👑
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                          Plus gros acheteur
+                        </p>
+                        <p className="text-xl sm:text-2xl font-bold text-white mt-1">
+                          Acheteur anonyme
+                        </p>
+                        <p className="text-sm text-zinc-500 mt-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+                          {showPurchasedPixelsOnWall ? (
+                            'Identité divulguée'
+                          ) : (
+                            <>
+                              <span>Identité non divulguée</span>
+                              <span className="text-zinc-600 tabular-nums text-xs sm:text-sm font-medium">
+                                · {displayStats.totalPixelsSold.toLocaleString('fr-FR')} /{' '}
+                                {PIXELS_DISPLAY_PURCHASES_THRESHOLD.toLocaleString('fr-FR')} px
+                              </span>
+                            </>
+                          )}
+                        </p>
+                        <p className="text-sm text-zinc-400 mt-1">
+                          <span className="text-emerald-400 font-semibold tabular-nums">
+                            {largestDemoPixels.toLocaleString('fr-FR')}
+                          </span>{' '}
+                          pixels réservés sur le mur
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center sm:justify-end gap-3 flex-shrink-0">
+                      <div
+                        className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-zinc-800 border border-white/10 flex items-center justify-center text-zinc-500 text-2xl font-light"
+                        aria-hidden
+                      >
+                        ?
+                      </div>
+                      <button
+                        type="button"
+                        onClick={scrollToWall}
+                        className="rounded-xl px-4 py-3 text-sm font-semibold bg-white/10 text-white hover:bg-white/15 border border-white/10 transition-colors whitespace-nowrap"
+                      >
+                        Voir le mur →
+                      </button>
+                    </div>
+                  </>
+                ) : showRealLeader ? (
+                  <>
+                    <div className="flex items-center gap-4 text-center sm:text-left flex-1 min-w-0">
+                      <span className="text-4xl flex-shrink-0" aria-hidden>
+                        👑
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                          Plus gros acheteur
+                        </p>
+                        <p className="text-xl sm:text-2xl font-bold text-white mt-1 truncate">
+                          {biggestBuyer!.advertiser_name}
+                        </p>
+                        <p className="text-sm text-zinc-400 mt-1">
+                          <span className="text-emerald-400 font-semibold tabular-nums">
+                            {biggestBuyerPixels.toLocaleString('fr-FR')}
+                          </span>{' '}
+                          pixels réservés sur le mur
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-center sm:justify-end gap-3 flex-shrink-0">
+                      {biggestBuyer!.image_url ? (
+                        <img
+                          src={biggestBuyer!.image_url}
+                          alt=""
+                          className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl object-cover border border-white/15 shadow-lg"
+                        />
+                      ) : (
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-zinc-500 text-sm font-bold">
+                          {biggestBuyer!.advertiser_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <a
+                        href={
+                          biggestBuyer!.link.startsWith('http')
+                            ? biggestBuyer!.link
+                            : `https://${biggestBuyer!.link}`
+                        }
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-xl px-4 py-3 text-sm font-semibold bg-white/10 text-white hover:bg-white/15 border border-white/10 transition-colors whitespace-nowrap"
+                      >
+                        Visiter →
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left w-full justify-between">
+                    <div className="flex items-center gap-4">
+                      <span className="text-4xl flex-shrink-0" aria-hidden>
+                        👑
+                      </span>
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
+                          Plus gros acheteur
+                        </p>
+                        <p className="text-lg font-bold text-white mt-1">Place encore disponible</p>
+                        <p className="text-sm text-zinc-500 mt-1 max-w-md">
+                          Aucun achat enregistré pour l&apos;instant. Réservez la plus grande zone et devenez le leader du mur.
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={scrollToPurchase}
+                      className="rounded-xl px-5 py-3 text-sm font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/35 hover:bg-emerald-500/30 transition-colors whitespace-nowrap"
+                    >
+                      Acheter des pixels
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
+            </div>
+
+            {/* Live stats - premium cards (real + launch simulation) */}
+            <div className="mt-16 animate-fade-in-up animate-fade-in-up-delay-5">
+              <div className="flex items-center justify-center gap-2 mb-5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                <span className="text-xs font-medium text-zinc-500 uppercase tracking-widest">En direct</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-3xl mx-auto">
                 {[
-                  { label: 'Pixels vendus', value: stats?.totalPixelsSold ?? 0, suffix: '' },
-                  { label: 'Pixels restants', value: stats?.pixelsRemaining ?? 0, suffix: '' },
-                  { label: 'Revenus générés', value: stats?.revenue ?? 0, suffix: ' $' },
-                  { label: 'Annonceurs', value: stats?.advertisersCount ?? 0, suffix: '' },
+                  { label: 'Pixels vendus', value: displayStats.totalPixelsSold, suffix: '' },
+                  { label: 'Pixels restants', value: displayStats.pixelsRemaining, suffix: '' },
+                  { label: 'Revenus générés', value: displayStats.revenue, suffix: ' €' },
+                  { label: 'Annonceurs', value: displayStats.advertisersCount, suffix: '' },
                 ].map(({ label, value, suffix }) => (
-                  <div key={label} className="glass-card rounded-2xl px-4 py-4 text-center border border-white/[0.06]">
-                    <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums">
+                  <div key={label} className="glass-card rounded-2xl px-4 py-5 text-center border border-[var(--border)]">
+                    <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums tracking-tight">
                       <AnimatedCounter value={value} suffix={suffix} duration={1400} />
                     </p>
-                    <p className="text-xs text-zinc-500 uppercase tracking-wider mt-1">{label}</p>
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider mt-1.5 font-medium">{label}</p>
                   </div>
                 ))}
               </div>
@@ -232,218 +405,307 @@ export default function HomePage() {
 
         {/* FOMO Ticker */}
         {lastAd && (
-          <div key={tickerKey} className="border-b border-white/[0.06] bg-white/[0.02] py-2 overflow-hidden">
+          <div key={tickerKey} className="border-b border-[var(--border)] bg-white/[0.02] py-3 overflow-hidden">
             <div className="ticker-wrap flex">
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-4">
-                <span className="text-emerald-400 font-medium">{lastAd.advertiser_name}</span>
-                {' '}vient d&apos;acheter {(lastAd.width * lastAd.height * 100).toLocaleString('fr-FR')} pixels · Pixel acheté {timeAgo(lastAd.purchase_date ?? '')}
+              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+                <span className="text-emerald-400 font-semibold">{lastAd.advertiser_name}</span>
+                {' '}vient d&apos;acheter {(lastAd.width * lastAd.height * 100).toLocaleString('fr-FR')} pixels · {timeAgo(lastAd.purchase_date ?? '')}
               </p>
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-4">
-                Les pixels au centre deviennent rares. Réservez votre zone avant qu&apos;elle ne soit prise.
+              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+                Réservez votre zone avant qu&apos;elle ne soit prise. 1 pixel = 1 €.
+              </p>
+              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+                <span className="text-emerald-400 font-semibold">{lastAd.advertiser_name}</span>
+                {' '}vient d&apos;acheter {(lastAd.width * lastAd.height * 100).toLocaleString('fr-FR')} pixels · {timeAgo(lastAd.purchase_date ?? '')}
+              </p>
+              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+                Réservez votre zone avant qu&apos;elle ne soit prise. 1 pixel = 1 €.
               </p>
             </div>
           </div>
         )}
 
-        {/* Wall + Purchase */}
+        {/* Pixel wall - main attraction, fully visible on homepage */}
         <section
           ref={(el) => { if (el) sectionRefs.current[0] = el; }}
-          className="reveal max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16"
+          className="reveal w-full px-4 sm:px-6 lg:px-8 py-8 sm:py-10"
         >
           <div ref={wallRef} className="scroll-mt-24" />
-          <p className="text-zinc-500 text-sm mb-2 max-w-2xl">
-            Sélectionnez des pixels sur la grille (glissez pour une zone). Minimum 10×10. Centre 5 $/px, milieu 2 $/px, périphérie 1 $/px.
-          </p>
-          <p className="text-zinc-600 text-xs mb-6">
-            Les meilleurs emplacements partent en premier. Les pixels au centre deviennent rares.
-          </p>
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-8 xl:gap-10">
-            <div className="xl:col-span-8">
-              <div className="aspect-square max-h-[min(78vh,820px)] w-full">
+          <div className="w-full max-w-[1680px] mx-auto flex flex-col lg:flex-row gap-6 lg:gap-8 items-stretch">
+            {/* Wall column: dense mosaic, nearly full width, max 1400–1600px */}
+            <div className="flex-1 min-w-0 flex flex-col items-center">
+              <div className="w-full max-w-[1600px] mb-3 space-y-2">
+                <p className="text-zinc-500 text-xs sm:text-sm font-medium">
+                  Glissez pour sélectionner une zone sur le mur (blocs disponibles uniquement)
+                </p>
+                {!showPurchasedPixelsOnWall && (
+                  <p className="text-xs sm:text-sm text-zinc-400 font-medium rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5">
+                    <span className="text-amber-400/95 font-semibold">Affichage des pixels achetés</span>
+                    {' '}
+                    sur le mur à partir de{' '}
+                    <span className="text-white tabular-nums">
+                      {PIXELS_DISPLAY_PURCHASES_THRESHOLD.toLocaleString('fr-FR')}
+                    </span>{' '}
+                    pixels vendus
+                    <span className="text-zinc-500 block mt-1 text-[11px] sm:text-xs">
+                      Progression :{' '}
+                      <span className="text-zinc-300 tabular-nums">
+                        {displayStats.totalPixelsSold.toLocaleString('fr-FR')}
+                      </span>{' '}
+                      / {PIXELS_DISPLAY_PURCHASES_THRESHOLD.toLocaleString('fr-FR')} pixels
+                    </span>
+                  </p>
+                )}
+              </div>
+              <div className="w-full max-w-[min(100%,1600px)] aspect-square rounded-2xl overflow-hidden border border-white/[0.06] shadow-2xl shadow-black/60 bg-[var(--bg-elevated)]">
                 {loading ? (
-                  <div className="w-full h-full flex items-center justify-center rounded-3xl border border-white/[0.06] bg-white/[0.02]">
-                    <span className="text-zinc-500">Chargement du mur…</span>
+                  <div className="w-full h-full flex items-center justify-center bg-[var(--bg-elevated)]">
+                    <span className="text-zinc-500 font-medium">Chargement du mur…</span>
                   </div>
                 ) : (
                   <PixelGrid
-                    ads={ads}
+                    ads={showPurchasedPixelsOnWall ? ads : []}
                     selectedBlocks={selectedBlocks}
                     onSelectBlocks={setSelectedBlocks}
                     onBlockClick={handleBlockClick}
                     selectionMode={selectionMode}
+                    demoAds={DEMO_ADS}
                   />
                 )}
               </div>
               <HeatmapLegend />
-              {stats && stats.pixelsRemaining < 1_000_000 && (
-                <p className="mt-3 text-center text-sm text-amber-400/90">
-                  Plus que <strong>{stats.pixelsRemaining.toLocaleString('fr-FR')}</strong> pixels disponibles. Les zones centrales partent en premier.
+              <p className="mt-4 text-center text-sm font-medium text-zinc-400">
+                Imaginez votre logo ici. Votre marque restera sur ce mur pour toujours.
+              </p>
+              {displayStats.pixelsRemaining < 1_000_000 && (
+                <p className="mt-1 text-center text-sm font-semibold text-amber-400/95">
+                  Plus que <strong className="text-white">{displayStats.pixelsRemaining.toLocaleString('fr-FR')}</strong> pixels disponibles
                 </p>
               )}
             </div>
-            <div className="xl:col-span-4 space-y-6">
-              <div className="xl:sticky xl:top-24 space-y-6">
-                <RecentPurchasesFeed purchases={ads.slice(0, 10)} />
+            {/* Purchase panel: sticky on desktop, below wall on mobile */}
+            <aside className="w-full lg:w-[340px] lg:flex-shrink-0">
+              <div className="lg:sticky lg:top-28 space-y-5">
+                <RecentPurchasesFeed />
                 <PurchasePanel
                   selectedBlocks={selectedBlocks}
                   onClearSelection={() => setSelectedBlocks([])}
                   onPurchaseSuccess={() => { fetchAds(); fetchStats(); }}
                 />
                 {selectedBlocks.length === 0 && (
-                  <div className="glass-card rounded-3xl border border-white/[0.06] p-8 text-center">
-                    <p className="text-zinc-500 text-sm mb-2">
-                      Sélectionnez des blocs sur le mur pour afficher le panier.
+                  <div className="glass-card rounded-2xl border border-[var(--border)] p-6 text-center">
+                    <p className="text-zinc-500 text-sm font-medium mb-1">
+                      Sélectionnez une zone sur le mur pour voir le prix et acheter.
                     </p>
-                    {stats && (
-                      <p className="text-xs text-amber-400/80">
-                        {stats.pixelsRemaining.toLocaleString('fr-FR')} pixels restants · Réservez votre zone.
-                      </p>
-                    )}
+                    <p className="text-xs text-amber-400/90 font-medium">
+                      {displayStats.pixelsRemaining.toLocaleString('fr-FR')} pixels restants
+                    </p>
                   </div>
                 )}
               </div>
-            </div>
+            </aside>
           </div>
         </section>
 
-        {/* Featured ads - logos */}
-        {featuredAds.length > 0 && (
-          <section
-            ref={(el) => { if (el) sectionRefs.current[1] = el; }}
-            className="reveal max-w-6xl mx-auto px-4 sm:px-6 py-12 border-t border-white/[0.06]"
-          >
-            <h3 className="text-xl font-semibold text-white mb-4 text-center">Annonceurs à la une</h3>
-            <p className="text-zinc-500 text-sm text-center mb-6 max-w-xl mx-auto">
-              Ces marques ont déjà réservé leur place sur le mur. Rejoignez-les.
+        {/* Featured advertisers */}
+        <section
+          ref={(el) => { if (el) sectionRefs.current[1] = el; }}
+          className="reveal border-t border-[var(--border)] py-14 sm:py-20"
+        >
+          <div className="max-w-5xl mx-auto px-4 sm:px-6">
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-2">Ils ont rejoint le mur</h3>
+            <p className="text-zinc-500 text-sm sm:text-base text-center mb-10 max-w-xl mx-auto font-medium">
+              Ces marques ont réservé leur place. Rejoignez-les et affichez votre logo en permanence.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-6">
-              {featuredAds.map((ad) => (
-                <a
-                  key={ad.id}
-                  href={ad.link.startsWith('http') ? ad.link : 'https://' + ad.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="glass-card rounded-2xl p-4 w-20 h-20 flex items-center justify-center border border-white/[0.06] hover:border-emerald-500/30 transition-colors overflow-hidden"
-                  title={ad.advertiser_name}
-                >
-                  {ad.image_url ? (
-                    <img src={ad.image_url} alt={ad.advertiser_name} className="w-full h-full object-contain" />
-                  ) : (
-                    <span className="text-zinc-500 text-xs font-medium truncate">{ad.advertiser_name}</span>
-                  )}
-                </a>
-              ))}
-            </div>
-            <p className="text-center mt-6">
-              <Link href="/annonceurs" className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors">
-                Voir tous les annonceurs →
-              </Link>
-            </p>
-          </section>
-        )}
+            {featuredAds.length > 0 ? (
+              <>
+                <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
+                  {featuredAds.map((ad) => (
+                    <a
+                      key={ad.id}
+                      href={ad.link.startsWith('http') ? ad.link : 'https://' + ad.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="glass-card rounded-2xl p-4 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border border-[var(--border)] hover:border-emerald-500/30 hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.25)] transition-all overflow-hidden"
+                      title={ad.advertiser_name}
+                    >
+                      {ad.image_url ? (
+                        <img src={ad.image_url} alt={ad.advertiser_name} className="w-full h-full object-contain" />
+                      ) : (
+                        <span className="text-zinc-500 text-xs font-semibold truncate">{ad.advertiser_name}</span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+                <p className="text-center mt-8">
+                  <Link href="/advertisers" className="text-sm font-semibold text-emerald-400 hover:text-emerald-300 transition-colors">
+                    Voir tous les annonceurs →
+                  </Link>
+                </p>
+              </>
+            ) : (
+              <p className="text-zinc-500 text-center font-medium">
+                Les premiers annonceurs apparaîtront ici. Soyez parmi eux.
+              </p>
+            )}
+          </div>
+        </section>
 
-        {/* Derniers achats + Top annonceurs */}
+        {/* Social proof - derniers achats */}
         <section
           ref={(el) => { if (el) sectionRefs.current[2] = el; }}
-          className="reveal max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-16 border-t border-white/[0.06]"
+          className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="md:col-span-2">
-              <h3 className="text-xl font-semibold text-white mb-4">Derniers achats</h3>
-              <div className="space-y-2">
-                {lastPurchases.length === 0 ? (
-                  <p className="text-zinc-500 text-sm">Aucun achat pour l&apos;instant.</p>
-                ) : (
-                  lastPurchases.map((ad) => (
-                    <div
-                      key={ad.id}
-                      className="glass-card rounded-xl px-4 py-3 flex items-center justify-between gap-3 border border-white/[0.06] hover:border-white/10 transition-colors"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {ad.image_url ? (
-                          <img src={ad.image_url} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
-                        ) : (
-                          <div className="w-10 h-10 rounded-lg bg-white/5 flex-shrink-0" />
-                        )}
-                        <span className="font-medium text-white truncate">{ad.advertiser_name}</span>
-                      </div>
-                      <span className="text-zinc-500 text-sm flex-shrink-0">{formatDate(ad.purchase_date)}</span>
+          <div className="max-w-3xl mx-auto px-4 sm:px-6">
+            <h3 className="text-xl font-bold text-white mb-5">Derniers achats</h3>
+            <div className="space-y-3">
+              {lastPurchases.length === 0 ? (
+                <p className="text-zinc-500 font-medium">Aucun achat pour l&apos;instant.</p>
+              ) : (
+                lastPurchases.map((ad) => (
+                  <div
+                    key={ad.id}
+                    className="glass-card rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 border border-[var(--border)] hover:border-white/10 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {ad.image_url ? (
+                        <img src={ad.image_url} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-white/10" />
+                      ) : (
+                        <div className="w-11 h-11 rounded-xl bg-white/5 flex-shrink-0 flex items-center justify-center text-zinc-500 text-sm font-semibold">
+                          {ad.advertiser_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      <span className="font-semibold text-white truncate">{ad.advertiser_name}</span>
                     </div>
-                  ))
-                )}
-              </div>
-            </div>
-            <div>
-              <h3 className="text-xl font-semibold text-white mb-4">Top annonceurs</h3>
-              <div className="space-y-2">
-                {topAdvertisers.length === 0 ? (
-                  <p className="text-zinc-500 text-sm">Aucun annonceur pour l&apos;instant.</p>
-                ) : (
-                  topAdvertisers.map((ad) => (
-                    <div
-                      key={ad.id}
-                      className="glass-card rounded-xl px-4 py-3 flex items-center justify-between gap-3 border border-white/[0.06] hover:border-white/10 transition-colors"
-                    >
-                      <span className="font-medium text-white truncate">{ad.advertiser_name}</span>
-                      <span className="text-emerald-400/90 text-sm flex-shrink-0">{ad.width * ad.height * 100} px</span>
+                    <div className="text-right flex-shrink-0 leading-tight">
+                      {ad.purchase_date ? (
+                        <>
+                          <span className="text-zinc-400 text-sm font-medium block">
+                            {timeAgo(ad.purchase_date)}
+                          </span>
+                          <span className="text-zinc-600 text-xs font-medium">
+                            {formatDate(ad.purchase_date)}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-zinc-500 text-sm font-medium">—</span>
+                      )}
                     </div>
-                  ))
-                )}
-              </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </section>
 
-        {/* How it works - 3 steps */}
+        {/* Trust copy */}
+        <section className="border-t border-[var(--border)] py-12 sm:py-16">
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
+            <p className="text-xl font-semibold text-zinc-300">
+              Votre publicité restera visible pour toujours.
+            </p>
+            <p className="mt-2 text-zinc-500 font-medium">
+              Votre marque devient une partie de l&apos;histoire d&apos;Internet.
+            </p>
+          </div>
+        </section>
+
+        {/* How it works */}
         <section
           ref={(el) => { if (el) sectionRefs.current[3] = el; }}
-          className="reveal max-w-6xl mx-auto px-4 sm:px-6 py-12 sm:py-20 border-t border-white/[0.06]"
+          className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
-          <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-12">Comment ça marche</h3>
-          <div className="grid sm:grid-cols-3 gap-8">
-            {HOW_IT_WORKS.map((item) => (
-              <div
-                key={item.step}
-                className="glass-card rounded-2xl p-6 border border-white/[0.06] hover:border-emerald-500/20 transition-colors group text-center"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 font-bold text-lg flex items-center justify-center mx-auto mb-4 group-hover:bg-emerald-500/30 transition-colors">
-                  {item.step}
+          <div className="max-w-5xl mx-auto px-4 sm:px-6">
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-12">Comment ça marche</h3>
+            <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
+              {HOW_IT_WORKS.map((item) => (
+                <div
+                  key={item.step}
+                  className="glass-card rounded-2xl p-6 sm:p-8 border border-[var(--border)] hover:border-emerald-500/20 transition-colors group text-center"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 text-emerald-400 font-bold text-xl flex items-center justify-center mx-auto mb-5 group-hover:bg-emerald-500/25 transition-colors">
+                    {item.step}
+                  </div>
+                  <h4 className="font-bold text-white mb-2 text-lg">{item.title}</h4>
+                  <p className="text-zinc-400 text-sm leading-relaxed">{item.desc}</p>
                 </div>
-                <h4 className="font-semibold text-white mb-2">{item.title}</h4>
-                <p className="text-zinc-400 text-sm">{item.desc}</p>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </section>
 
-        {/* FAQ */}
+        {/* FAQ - professional */}
         <section
           ref={(el) => { if (el) sectionRefs.current[4] = el; }}
-          className="reveal max-w-3xl mx-auto px-4 sm:px-6 py-12 sm:py-20 border-t border-white/[0.06]"
+          className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
-          <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-10">FAQ</h3>
-          <div className="space-y-2">
-            {FAQ_ITEMS.map((item, i) => (
-              <div key={i} className="glass-card rounded-xl border border-white/[0.06] overflow-hidden">
-                <button
-                  type="button"
-                  onClick={() => setFaqOpen(faqOpen === i ? null : i)}
-                  className="w-full px-5 py-4 flex items-center justify-between gap-4 text-left hover:bg-white/[0.02] transition-colors"
-                >
-                  <span className="font-medium text-white">{item.q}</span>
-                  <span className={`text-emerald-400 transition-transform flex-shrink-0 ${faqOpen === i ? 'rotate-180' : ''}`}>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                  </span>
-                </button>
-                {faqOpen === i && (
-                  <div className="px-5 pb-4 text-zinc-400 text-sm border-t border-white/[0.06] pt-3">
-                    {item.a}
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="max-w-3xl mx-auto px-4 sm:px-6">
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Questions fréquentes</h3>
+            <p className="text-zinc-500 text-center text-sm font-medium mb-10">Tout ce que vous devez savoir avant d&apos;acheter.</p>
+            <div className="space-y-3">
+              {FAQ_ITEMS.map((item, i) => (
+                <div key={i} className="glass-card rounded-xl border border-[var(--border)] overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setFaqOpen(faqOpen === i ? null : i)}
+                    className="w-full px-5 py-4 sm:px-6 sm:py-4 flex items-center justify-between gap-4 text-left hover:bg-white/[0.02] transition-colors"
+                  >
+                    <span className="font-semibold text-white pr-4">{item.q}</span>
+                    <span className={`text-emerald-400 flex-shrink-0 transition-transform duration-200 ${faqOpen === i ? 'rotate-180' : ''}`}>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </span>
+                  </button>
+                  {faqOpen === i && (
+                    <div className="px-5 sm:px-6 pb-5 pt-1 text-zinc-400 text-sm leading-relaxed border-t border-[var(--border)]">
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </section>
+
+        {/* Contact */}
+        <section className="reveal border-t border-[var(--border)] py-14 sm:py-20">
+          <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
+            <h3 className="text-2xl font-bold text-white mb-2">Contact</h3>
+            <p className="text-zinc-500 text-sm font-medium mb-6">
+              Une question ? Écrivez-nous.
+            </p>
+            <a
+              href={`mailto:${CONTACT_EMAIL}`}
+              className="inline-flex items-center gap-2 text-emerald-400 font-semibold hover:text-emerald-300 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              {CONTACT_EMAIL}
+            </a>
+          </div>
+        </section>
+
+        {/* Legal footer */}
+        <footer className="border-t border-[var(--border)] py-8 sm:py-10">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <p className="text-zinc-500 text-sm font-medium">
+                © {new Date().getFullYear()} Million Dollar Pixel. Tous droits réservés.
+              </p>
+              <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
+                <Link href="/advertisers" className="text-sm text-zinc-500 hover:text-white font-medium transition-colors">
+                  Annonceurs
+                </Link>
+                <a href={`mailto:${CONTACT_EMAIL}`} className="text-sm text-zinc-500 hover:text-white font-medium transition-colors">
+                  Contact
+                </a>
+                <span className="text-sm text-zinc-600 font-medium">Mentions légales</span>
+                <span className="text-sm text-zinc-600 font-medium">CGV</span>
+              </div>
+            </div>
+            <p className="mt-6 text-center text-xs text-zinc-600 font-medium max-w-2xl mx-auto">
+              Paiement sécurisé par Stripe. Vos données sont protégées. Ce site est un projet de démonstration.
+            </p>
+          </div>
+        </footer>
       </main>
     </div>
   );

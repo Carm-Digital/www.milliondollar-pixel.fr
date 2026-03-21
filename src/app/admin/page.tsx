@@ -195,7 +195,7 @@ export default function AdminPage() {
             </div>
             <div className="rounded-lg border border-gray-800 bg-gray-900/50 p-4">
               <p className="text-gray-400 text-sm">Revenue</p>
-              <p className="text-2xl font-semibold">${stats.revenue.toLocaleString()}</p>
+              <p className="text-2xl font-semibold">{stats.revenue.toLocaleString('fr-FR')} €</p>
             </div>
           </div>
         )}

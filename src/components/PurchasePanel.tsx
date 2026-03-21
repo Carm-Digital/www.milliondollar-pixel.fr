@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { formatPrice } from '@/types/database';
-import { getTotalPriceDollars } from '@/lib/pricing';
+import { getTotalPriceDollars, PRICE_PER_BLOCK_EURO, PIXELS_PER_BLOCK } from '@/lib/pricing';
 
 type PurchasePanelProps = {
   selectedBlocks: { x: number; y: number }[];
@@ -45,7 +45,7 @@ export function PurchasePanel({
   const [error, setError] = useState<string | null>(null);
 
   const blockCount = selectedBlocks.length;
-  const pixelCount = blockCount * 100;
+  const pixelCount = blockCount * PIXELS_PER_BLOCK;
   const totalPriceDollars = getTotalPriceDollars(selectedBlocks);
   const totalPriceFormatted = formatPrice(totalPriceDollars);
 
@@ -121,73 +121,76 @@ export function PurchasePanel({
   if (blockCount === 0) return null;
 
   return (
-    <div className="glass-card glow-border rounded-3xl p-6 sm:p-7 border border-white/[0.08]">
-      <h3 className="text-xl font-semibold text-white mb-1">
-        Acheter la sélection
-      </h3>
-      <p className="text-zinc-400 text-sm mb-6">
-        Remplissez le formulaire puis validez le paiement.
+    <div className="glass-card rounded-2xl p-6 sm:p-7 border border-[var(--border-strong)] shadow-lg">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="text-lg font-bold text-white">
+          Finaliser l&apos;achat
+        </h3>
+      </div>
+      <p className="text-zinc-500 text-sm font-medium mb-6">
+        Remplissez le formulaire. Paiement sécurisé par Stripe.
       </p>
 
-      <div className="rounded-2xl bg-black/30 border border-white/[0.06] p-4 mb-6">
-        <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 mb-3">
-          Récapitulatif
+      {/* Pricing - 1 bloc = 100 pixels = 100 € */}
+      <div className="rounded-xl bg-black/40 border border-[var(--border)] p-4 mb-6">
+        <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 mb-2">
+          Tarif : 1 pixel = 1 € · 1 bloc (10×10) = {PRICE_PER_BLOCK_EURO} €
         </p>
-        <dl className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-zinc-400">Blocs sélectionnés</dt>
-            <dd className="font-medium text-white">{blockCount}</dd>
+        <dl className="space-y-2.5 text-sm">
+          <div className="flex justify-between items-center">
+            <dt className="text-zinc-400 font-medium">Blocs sélectionnés</dt>
+            <dd className="font-semibold text-white">{blockCount} bloc{blockCount > 1 ? 's' : ''}</dd>
           </div>
-          <div className="flex justify-between">
-            <dt className="text-zinc-400">Pixels</dt>
-            <dd className="font-medium text-white">{pixelCount.toLocaleString('fr-FR')}</dd>
+          <div className="flex justify-between items-center">
+            <dt className="text-zinc-400 font-medium">Pixels</dt>
+            <dd className="font-semibold text-white">{pixelCount.toLocaleString('fr-FR')} pixels</dd>
           </div>
-          <div className="flex justify-between pt-2 border-t border-white/[0.06]">
-            <dt className="text-zinc-300 font-medium">Prix total</dt>
-            <dd className="text-lg font-semibold text-emerald-400">{totalPriceFormatted}</dd>
+          <div className="flex justify-between items-center pt-3 mt-3 border-t border-[var(--border)]">
+            <dt className="text-zinc-300 font-semibold">Total à payer</dt>
+            <dd className="text-xl font-bold text-emerald-400">{totalPriceFormatted}</dd>
           </div>
         </dl>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2">
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">
             Nom ou marque
           </label>
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 focus-within:border-emerald-500/40 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all input-glow">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-white/[0.04] px-4 py-3 focus-within:border-emerald-500/50 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all input-glow">
             <IconUser />
             <input
               type="text"
               value={advertiserName}
               onChange={(e) => setAdvertiserName(e.target.value)}
-              className="flex-1 min-w-0 bg-transparent text-white placeholder-zinc-500 focus:outline-none"
+              className="flex-1 min-w-0 bg-transparent text-white placeholder-zinc-500 focus:outline-none font-medium"
               placeholder="Votre nom ou marque"
               required
             />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2">
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">
             Lien du site
           </label>
-          <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 focus-within:border-emerald-500/40 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all input-glow">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] bg-white/[0.04] px-4 py-3 focus-within:border-emerald-500/50 focus-within:ring-2 focus-within:ring-emerald-500/20 transition-all input-glow">
             <IconLink />
             <input
               type="url"
               value={link}
               onChange={(e) => setLink(e.target.value)}
-              className="flex-1 min-w-0 bg-transparent text-white placeholder-zinc-500 focus:outline-none"
+              className="flex-1 min-w-0 bg-transparent text-white placeholder-zinc-500 focus:outline-none font-medium"
               placeholder="https://..."
               required
             />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-zinc-300 mb-2">
-            Image de l&#39;annonce <span className="text-zinc-500 font-normal">(optionnel)</span>
+          <label className="block text-sm font-semibold text-zinc-300 mb-2">
+            Logo ou image <span className="text-zinc-500 font-normal">(optionnel)</span>
           </label>
           <label
-            className="flex flex-col items-center justify-center w-full rounded-2xl border-2 border-dashed border-white/[0.08] bg-white/[0.02] hover:border-emerald-500/30 hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden min-h-[100px] focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500/30"
+            className="flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed border-[var(--border)] bg-white/[0.02] hover:border-emerald-500/30 hover:bg-white/[0.04] transition-all cursor-pointer overflow-hidden min-h-[100px] focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500/30"
             onDrop={handleDrop}
             onDragOver={handleDragOver}
           >
@@ -204,12 +207,12 @@ export function PurchasePanel({
                   alt="Aperçu"
                   className="w-full max-h-28 object-cover"
                 />
-                <span className="absolute bottom-2 right-2 text-xs text-white/90 bg-black/60 px-2 py-1 rounded-lg">
+                <span className="absolute bottom-2 right-2 text-xs text-white/90 bg-black/70 px-2 py-1 rounded-lg font-medium">
                   Cliquer pour changer
                 </span>
               </div>
             ) : (
-              <span className="flex items-center gap-2 text-zinc-500 text-sm py-6">
+              <span className="flex items-center gap-2 text-zinc-500 text-sm py-6 font-medium">
                 <IconImage />
                 Glissez une image ou cliquez
               </span>
@@ -218,27 +221,34 @@ export function PurchasePanel({
         </div>
 
         {error && (
-          <p className="text-sm text-red-400 bg-red-500/10 rounded-xl px-4 py-2.5 border border-red-500/20">
+          <p className="text-sm text-red-400 bg-red-500/10 rounded-xl px-4 py-3 border border-red-500/20 font-medium">
             {error}
           </p>
         )}
 
-        <div className="flex gap-3 pt-2">
+        <div className="flex gap-3 pt-1">
           <button
             type="button"
             onClick={onClearSelection}
-            className="flex-1 rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5 text-zinc-300 hover:bg-white/10 hover:text-white transition-all font-medium btn-lift"
+            className="flex-1 rounded-xl btn-secondary px-4 py-3.5 text-zinc-300 hover:text-white font-semibold btn-lift"
           >
             Annuler
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex-1 rounded-2xl cta-primary px-4 py-3.5 font-semibold text-white disabled:opacity-50 disabled:transform-none disabled:hover:shadow-none"
+            className="flex-1 rounded-xl cta-primary px-4 py-3.5 font-bold text-white disabled:opacity-50 disabled:transform-none disabled:hover:shadow-none"
           >
-            {loading ? 'Traitement…' : `Payer ${totalPriceFormatted}`}
+            {loading ? 'Redirection…' : `Payer ${totalPriceFormatted}`}
           </button>
         </div>
+
+        <p className="flex items-center justify-center gap-2 text-xs text-zinc-500 font-medium">
+          <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Paiement sécurisé par Stripe
+        </p>
       </form>
     </div>
   );

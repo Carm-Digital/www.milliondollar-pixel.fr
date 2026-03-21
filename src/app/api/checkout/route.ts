@@ -1,6 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { BLOCKS_PER_SIDE } from '@/types/database';
-import { getTotalCents } from '@/lib/pricing';
+import { getTotalCents, PIXELS_PER_BLOCK } from '@/lib/pricing';
 import Stripe from 'stripe';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const pixelCount = blocks.length * 100;
+    const pixelCount = blocks.length * PIXELS_PER_BLOCK;
     const totalCents = getTotalCents(blocks);
 
     const stripe = getStripe();
@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
       line_items: [
         {
           price_data: {
-            currency: 'usd',
+            currency: 'eur',
             product_data: {
-              name: `${width * 10}x${height * 10} Pixel Ad`,
-              description: `${blocks.length} bloc(s) · ${pixelCount.toLocaleString('fr-FR')} pixels · ${advertiser_name}`,
+              name: `${width * 10}x${height * 10} Pixel Ad · ${totalCents / 100} €`,
+              description: `Tarif : 1 €/pixel. ${blocks.length} bloc(s) = ${pixelCount.toLocaleString('fr-FR')} pixels = ${totalCents / 100} € · ${advertiser_name}`,
               images: image_url ? [image_url] : undefined,
             },
             unit_amount: totalCents,

@@ -1,10 +1,9 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { PRICE_PER_PIXEL_EURO, PIXELS_PER_BLOCK } from '@/lib/pricing';
+import { TOTAL_GRID_PIXELS } from '@/types/database';
 
 export const dynamic = 'force-dynamic';
-
-const TOTAL_GRID_PIXELS = 1_000_000;
-const PRICE_PER_PIXEL = 1;
 
 export async function GET() {
   const supabase = await createClient();
@@ -18,8 +17,8 @@ export async function GET() {
   }
 
   const totalBlocks = (ads ?? []).reduce((s, a) => s + a.width * a.height, 0);
-  const totalPixelsSold = totalBlocks * 100;
-  const revenue = totalPixelsSold * PRICE_PER_PIXEL;
+  const totalPixelsSold = totalBlocks * PIXELS_PER_BLOCK;
+  const revenue = totalPixelsSold * PRICE_PER_PIXEL_EURO;
   const advertisersCount = ads?.length ?? 0;
   const pixelsRemaining = Math.max(0, TOTAL_GRID_PIXELS - totalPixelsSold);
 

@@ -23,5 +23,5 @@ export const TOTAL_GRID_PIXELS = 1_000_000;
 
 /** Format price for display (summary and CTA must use this for consistency). */
 export function formatPrice(amount: number): string {
-  return `${amount.toLocaleString('fr-FR')} $`;
+  return `${amount.toLocaleString('fr-FR')} €`;
 }
