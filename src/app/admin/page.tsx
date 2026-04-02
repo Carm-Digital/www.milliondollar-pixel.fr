@@ -10,6 +10,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<{ email: string } | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotStatus, setForgotStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [forgotMessage, setForgotMessage] = useState<string | null>(null);
   const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
 
   useEffect(() => {
@@ -65,11 +69,33 @@ export default function AdminPage() {
     setUser(data.user ? { email: data.user.email ?? '' } : null);
   };
 
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotMessage(null);
+    setForgotStatus('sending');
+    const supabase = supabaseRef.current ?? createClient();
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail.trim(), {
+      redirectTo: `${origin}/admin/reinitialiser-mot-de-passe`,
+    });
+    if (error) {
+      setForgotStatus('error');
+      setForgotMessage(error.message);
+      return;
+    }
+    setForgotStatus('sent');
+    setForgotMessage(
+      'Si un compte existe pour cet e-mail, vous recevrez un lien pour choisir un nouveau mot de passe.'
+    );
+  };
+
   const handleSignOut = async () => {
+    await fetch('/api/admin/gate', { method: 'DELETE' }).catch(() => {});
     await supabaseRef.current?.auth.signOut();
     setUser(null);
     setAds([]);
     setStats(null);
+    window.location.href = '/admin/connexion';
   };
 
   const handleDelete = async (id: string) => {
@@ -135,26 +161,80 @@ export default function AdminPage() {
   if (!user) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
-        <form onSubmit={handleSignIn} className="w-full max-w-sm space-y-4 rounded-xl border border-gray-800 bg-gray-900/80 p-6">
-          <h1 className="text-xl font-semibold">Admin login</h1>
-          <input
-            name="email"
-            type="email"
-            placeholder="Email"
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
-            required
-          />
-          <input
-            name="password"
-            type="password"
-            placeholder="Password"
-            className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
-            required
-          />
-          <button type="submit" className="w-full rounded-lg bg-green-600 py-2 font-medium text-white hover:bg-green-500">
-            Sign in
-          </button>
-        </form>
+        <div className="w-full max-w-sm space-y-4">
+          {!forgotOpen ? (
+            <form onSubmit={handleSignIn} className="space-y-4 rounded-xl border border-gray-800 bg-gray-900/80 p-6">
+              <h1 className="text-xl font-semibold">Connexion admin</h1>
+              <input
+                name="email"
+                type="email"
+                placeholder="E-mail"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
+                required
+              />
+              <input
+                name="password"
+                type="password"
+                placeholder="Mot de passe"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
+                required
+              />
+              <button type="submit" className="w-full rounded-lg bg-green-600 py-2 font-medium text-white hover:bg-green-500">
+                Se connecter
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotOpen(true);
+                  setForgotStatus('idle');
+                  setForgotMessage(null);
+                }}
+                className="w-full text-sm text-gray-400 hover:text-white underline-offset-2 hover:underline"
+              >
+                Mot de passe oublié ?
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleForgotPassword} className="space-y-4 rounded-xl border border-gray-800 bg-gray-900/80 p-6">
+              <h1 className="text-xl font-semibold">Réinitialiser le mot de passe</h1>
+              <p className="text-sm text-gray-400">
+                Indiquez l’e-mail de votre compte admin. Vous recevrez un lien (vérifiez aussi les spams).
+              </p>
+              <input
+                type="email"
+                value={forgotEmail}
+                onChange={(e) => setForgotEmail(e.target.value)}
+                placeholder="E-mail"
+                className="w-full rounded-lg border border-gray-700 bg-gray-800 px-3 py-2 text-white"
+                required
+                autoComplete="email"
+              />
+              {forgotMessage && (
+                <p className={`text-sm ${forgotStatus === 'error' ? 'text-red-400' : 'text-gray-300'}`}>
+                  {forgotMessage}
+                </p>
+              )}
+              <button
+                type="submit"
+                disabled={forgotStatus === 'sending'}
+                className="w-full rounded-lg bg-green-600 py-2 font-medium text-white hover:bg-green-500 disabled:opacity-50"
+              >
+                {forgotStatus === 'sending' ? 'Envoi…' : 'Envoyer le lien'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setForgotOpen(false);
+                  setForgotStatus('idle');
+                  setForgotMessage(null);
+                }}
+                className="w-full text-sm text-gray-400 hover:text-white"
+              >
+                Retour à la connexion
+              </button>
+            </form>
+          )}
+        </div>
       </div>
     );
   }

@@ -47,15 +47,19 @@ const FAQ_ITEMS = [
   { q: 'Le paiement est-il sécurisé ?', a: 'Oui. Nous utilisons Stripe pour tous les paiements. Aucune donnée bancaire ne transite par nos serveurs.' },
 ];
 
+/** Affichage volontairement grossier (heures / jours seulement) : pas de minutes qui changent chaque minute. */
 function timeAgo(dateStr: string): string {
   const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '';
   const now = new Date();
   const min = Math.floor((now.getTime() - d.getTime()) / 60000);
-  if (min < 1) return 'à l\'instant';
-  if (min < 60) return `il y a ${min} minute${min > 1 ? 's' : ''}`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `il y a ${h} heure${h > 1 ? 's' : ''}`;
-  const day = Math.floor(h / 24);
+  if (min < 0) return '';
+
+  if (min < 24 * 60) {
+    const h = Math.max(1, Math.ceil(min / 60));
+    return `il y a ${h} heure${h > 1 ? 's' : ''}`;
+  }
+  const day = Math.floor(min / (60 * 24));
   return `il y a ${day} jour${day > 1 ? 's' : ''}`;
 }
 
@@ -69,7 +73,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [faqOpen, setFaqOpen] = useState<number | null>(null);
   const [tickerKey, setTickerKey] = useState(0);
-  /** Force le recalcul de timeAgo (ticker + derniers achats). */
+  /** Recalcul timeAgo (granularité heures : rafraîchir toutes les 5 min suffit). */
   const [, setRelativeTimeTick] = useState(0);
   const wallRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<HTMLElement[]>([]);
@@ -105,7 +109,7 @@ export default function HomePage() {
   }, [fetchStats, fetchAds]);
 
   useEffect(() => {
-    const id = setInterval(() => setRelativeTimeTick((n) => n + 1), 60_000);
+    const id = setInterval(() => setRelativeTimeTick((n) => n + 1), 5 * 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -146,15 +150,13 @@ export default function HomePage() {
     wallRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const lastPurchases = [...ads]
-    .sort((a, b) => {
+  const featuredAds = ads.filter((a) => a.image_url).slice(0, 8);
+  const lastAd =
+    [...ads].sort((a, b) => {
       const ta = a.purchase_date ? new Date(a.purchase_date).getTime() : 0;
       const tb = b.purchase_date ? new Date(b.purchase_date).getTime() : 0;
       return tb - ta;
-    })
-    .slice(0, 5);
-  const featuredAds = ads.filter((a) => a.image_url).slice(0, 8);
-  const lastAd = lastPurchases[0] ?? null;
+    })[0] ?? null;
   const displayStats = getDisplayStats(stats ?? null);
   const showPurchasedPixelsOnWall = shouldShowPurchasedPixelsOnWall(displayStats.totalPixelsSold);
   const biggestBuyer =
@@ -169,11 +171,6 @@ export default function HomePage() {
     largestDemoPixels > 0 &&
     (largestDemoPixels > biggestBuyerPixels || !biggestBuyer);
   const showRealLeader = biggestBuyer && !showAnonymousDemoLeader;
-
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--foreground)]">
@@ -384,11 +381,10 @@ export default function HomePage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
                 <span className="text-xs font-medium text-zinc-500 uppercase tracking-widest">En direct</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 max-w-3xl mx-auto">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-w-3xl mx-auto">
                 {[
                   { label: 'Pixels vendus', value: displayStats.totalPixelsSold, suffix: '' },
                   { label: 'Pixels restants', value: displayStats.pixelsRemaining, suffix: '' },
-                  { label: 'Revenus générés', value: displayStats.revenue, suffix: ' €' },
                   { label: 'Annonceurs', value: displayStats.advertisersCount, suffix: '' },
                 ].map(({ label, value, suffix }) => (
                   <div key={label} className="glass-card rounded-2xl px-4 py-5 text-center border border-[var(--border)]">
@@ -551,53 +547,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Social proof - derniers achats */}
-        <section
-          ref={(el) => { if (el) sectionRefs.current[2] = el; }}
-          className="reveal border-t border-[var(--border)] py-14 sm:py-20"
-        >
-          <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            <h3 className="text-xl font-bold text-white mb-5">Derniers achats</h3>
-            <div className="space-y-3">
-              {lastPurchases.length === 0 ? (
-                <p className="text-zinc-500 font-medium">Aucun achat pour l&apos;instant.</p>
-              ) : (
-                lastPurchases.map((ad) => (
-                  <div
-                    key={ad.id}
-                    className="glass-card rounded-xl px-4 py-3.5 flex items-center justify-between gap-4 border border-[var(--border)] hover:border-white/10 transition-colors"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      {ad.image_url ? (
-                        <img src={ad.image_url} alt="" className="w-11 h-11 rounded-xl object-cover flex-shrink-0 border border-white/10" />
-                      ) : (
-                        <div className="w-11 h-11 rounded-xl bg-white/5 flex-shrink-0 flex items-center justify-center text-zinc-500 text-sm font-semibold">
-                          {ad.advertiser_name.slice(0, 2).toUpperCase()}
-                        </div>
-                      )}
-                      <span className="font-semibold text-white truncate">{ad.advertiser_name}</span>
-                    </div>
-                    <div className="text-right flex-shrink-0 leading-tight">
-                      {ad.purchase_date ? (
-                        <>
-                          <span className="text-zinc-400 text-sm font-medium block">
-                            {timeAgo(ad.purchase_date)}
-                          </span>
-                          <span className="text-zinc-600 text-xs font-medium">
-                            {formatDate(ad.purchase_date)}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-zinc-500 text-sm font-medium">—</span>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </section>
-
         {/* Trust copy */}
         <section className="border-t border-[var(--border)] py-12 sm:py-16">
           <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
@@ -612,7 +561,7 @@ export default function HomePage() {
 
         {/* How it works */}
         <section
-          ref={(el) => { if (el) sectionRefs.current[3] = el; }}
+          ref={(el) => { if (el) sectionRefs.current[2] = el; }}
           className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
@@ -636,7 +585,7 @@ export default function HomePage() {
 
         {/* FAQ - professional */}
         <section
-          ref={(el) => { if (el) sectionRefs.current[4] = el; }}
+          ref={(el) => { if (el) sectionRefs.current[3] = el; }}
           className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
