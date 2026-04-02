@@ -109,7 +109,7 @@ export function PixelGrid({
       ctx.scale(dpr, dpr);
     }
 
-    const { scale, offsetX, offsetY, cellW, cellH } = getScaleAndOffset(w, h);
+    const { offsetX, offsetY, cellW, cellH } = getScaleAndOffset(w, h);
 
     const bgGradient = ctx.createLinearGradient(0, 0, w, h);
     bgGradient.addColorStop(0, '#050508');
@@ -132,7 +132,6 @@ export function PixelGrid({
         const isSelected =
           selectionMode &&
           selectedBlocks.some((b) => b.x === bx && b.y === by);
-        const isHover = hoverBlock?.x === bx && hoverBlock?.y === by;
 
         if (ad) {
           if (ad.image_url) {

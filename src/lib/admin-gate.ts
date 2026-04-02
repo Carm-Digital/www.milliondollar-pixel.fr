@@ -22,7 +22,11 @@ export async function createAdminGateToken(secret: string): Promise<string> {
 }
 
 function bufferToHex(buf: Uint8Array): string {
-  return [...buf].map((b) => b.toString(16).padStart(2, '0')).join('');
+  let s = '';
+  for (let i = 0; i < buf.length; i++) {
+    s += buf[i]!.toString(16).padStart(2, '0');
+  }
+  return s;
 }
 
 function timingSafeEqualHex(a: string, b: string): boolean {

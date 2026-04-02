@@ -116,7 +116,7 @@ function pickZone(rng: () => number): Zone {
   const r = rng();
   let acc = 0;
   const sum = PLACEMENT_ZONES.reduce((s, z) => s + z.weight, 0);
-  let t = r * sum;
+  const t = r * sum;
   for (const z of PLACEMENT_ZONES) {
     acc += z.weight;
     if (t < acc) return z;
