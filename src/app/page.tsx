@@ -177,7 +177,15 @@ export default function HomePage() {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--bg)]/90 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
-          <Link href="/" className="text-xl font-bold tracking-tight text-white">
+          <Link href="/" className="text-xl font-bold tracking-tight text-white logo-glow flex items-center gap-2">
+            <span className="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center flex-shrink-0">
+              <svg className="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 16 16">
+                <rect x="1" y="1" width="6" height="6" rx="1" opacity="0.6"/>
+                <rect x="9" y="1" width="6" height="6" rx="1"/>
+                <rect x="1" y="9" width="6" height="6" rx="1"/>
+                <rect x="9" y="9" width="6" height="6" rx="1" opacity="0.4"/>
+              </svg>
+            </span>
             Million Dollar Pixel
           </Link>
           <nav className="flex items-center gap-2 sm:gap-4">
@@ -204,22 +212,29 @@ export default function HomePage() {
 
       <main>
         {/* Hero - compact so wall is visible quickly */}
-        <section className="relative overflow-hidden border-b border-[var(--border)]">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_50%_-30%,rgba(16,185,129,0.12),transparent_50%)]" />
-          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.04] via-transparent to-transparent" />
+        <section className="relative overflow-hidden border-b border-[var(--border)] dot-pattern">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,rgba(16,185,129,0.14),transparent_55%)]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/[0.05] via-transparent to-transparent" />
+          <div className="orb orb-1" aria-hidden />
+          <div className="orb orb-2" aria-hidden />
+          <div className="orb orb-3" aria-hidden />
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-10 sm:py-14 text-center">
-            <p className="text-sm font-medium text-emerald-400/90 uppercase tracking-widest mb-4 animate-fade-in-up">
-              Le mur de pixels le plus connu d&apos;Internet
-            </p>
-            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold text-white tracking-tight animate-fade-in-up animate-fade-in-up-delay-1 leading-[1.05]">
+            <div className="flex justify-center mb-5 animate-fade-in-up">
+              <span className="hero-badge">Le mur de pixels le plus connu d&apos;Internet</span>
+            </div>
+            <h2 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight animate-fade-in-up animate-fade-in-up-delay-1 leading-[1.05] text-gradient">
               Possédez un morceau d&apos;internet.
             </h2>
             <p className="mt-6 text-lg sm:text-xl text-zinc-400 max-w-2xl mx-auto leading-relaxed animate-fade-in-up animate-fade-in-up-delay-2">
               1 000 000 pixels à vendre. Affichez votre marque, votre projet ou votre site sur un mur public permanent — pour toujours.
             </p>
-            <p className="mt-3 text-sm font-medium text-zinc-500 animate-fade-in-up animate-fade-in-up-delay-2">
-              1 pixel = 1 € · 1 bloc (10×10) = 100 € · Mur complet = 1 000 000 €
-            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-2 animate-fade-in-up animate-fade-in-up-delay-2">
+              <span className="price-chip">1 pixel = 1 €</span>
+              <span className="text-zinc-700 select-none">·</span>
+              <span className="price-chip">1 bloc (10×10) = 100 €</span>
+              <span className="text-zinc-700 select-none">·</span>
+              <span className="price-chip price-chip-featured">Mur complet = 1 000 000 €</span>
+            </div>
             <div className="mt-10 flex flex-wrap items-center justify-center gap-3 sm:gap-4 animate-fade-in-up animate-fade-in-up-delay-3">
               <button
                 type="button"
@@ -378,8 +393,10 @@ export default function HomePage() {
             {/* Live stats - premium cards (real + launch simulation) */}
             <div className="mt-16 animate-fade-in-up animate-fade-in-up-delay-5">
               <div className="flex items-center justify-center gap-2 mb-5">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
-                <span className="text-xs font-medium text-zinc-500 uppercase tracking-widest">En direct</span>
+                <span className="flex items-center gap-1.5 trust-pill">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" aria-hidden />
+                  En direct
+                </span>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 max-w-3xl mx-auto">
                 {[
@@ -387,8 +404,8 @@ export default function HomePage() {
                   { label: 'Pixels restants', value: displayStats.pixelsRemaining, suffix: '' },
                   { label: 'Annonceurs', value: displayStats.advertisersCount, suffix: '' },
                 ].map(({ label, value, suffix }) => (
-                  <div key={label} className="glass-card rounded-2xl px-4 py-5 text-center border border-[var(--border)]">
-                    <p className="text-2xl sm:text-3xl font-bold text-white tabular-nums tracking-tight">
+                  <div key={label} className="glass-card stat-card rounded-2xl px-4 py-5 text-center border border-[var(--border)]">
+                    <p className="text-2xl sm:text-3xl font-bold tabular-nums tracking-tight stat-value number-display">
                       <AnimatedCounter value={value} suffix={suffix} duration={1400} />
                     </p>
                     <p className="text-xs text-zinc-500 uppercase tracking-wider mt-1.5 font-medium">{label}</p>
@@ -401,22 +418,26 @@ export default function HomePage() {
 
         {/* FOMO Ticker */}
         {lastAd && (
-          <div key={tickerKey} className="border-b border-[var(--border)] bg-white/[0.02] py-3 overflow-hidden">
-            <div className="ticker-wrap flex">
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+          <div key={tickerKey} className="border-b border-[var(--border)] bg-gradient-to-r from-emerald-950/20 via-transparent to-emerald-950/20 py-2.5 overflow-hidden">
+            <div className="ticker-wrap flex items-center">
+              <span className="text-sm text-zinc-400 whitespace-nowrap px-8 flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" aria-hidden />
                 <span className="text-emerald-400 font-semibold">{lastAd.advertiser_name}</span>
                 {' '}vient d&apos;acheter {(lastAd.width * lastAd.height * 100).toLocaleString('fr-FR')} pixels · {timeAgo(lastAd.purchase_date ?? '')}
-              </p>
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
-                Réservez votre zone avant qu&apos;elle ne soit prise. 1 pixel = 1 €.
-              </p>
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
+              </span>
+              <span className="text-sm text-zinc-500 whitespace-nowrap px-8 flex items-center gap-2.5">
+                <span className="text-zinc-700" aria-hidden>◆</span>
+                Réservez votre zone avant qu&apos;elle ne soit prise · 1 pixel = 1 €
+              </span>
+              <span className="text-sm text-zinc-400 whitespace-nowrap px-8 flex items-center gap-2.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" aria-hidden />
                 <span className="text-emerald-400 font-semibold">{lastAd.advertiser_name}</span>
                 {' '}vient d&apos;acheter {(lastAd.width * lastAd.height * 100).toLocaleString('fr-FR')} pixels · {timeAgo(lastAd.purchase_date ?? '')}
-              </p>
-              <p className="text-sm text-zinc-400 whitespace-nowrap px-6">
-                Réservez votre zone avant qu&apos;elle ne soit prise. 1 pixel = 1 €.
-              </p>
+              </span>
+              <span className="text-sm text-zinc-500 whitespace-nowrap px-8 flex items-center gap-2.5">
+                <span className="text-zinc-700" aria-hidden>◆</span>
+                Réservez votre zone avant qu&apos;elle ne soit prise · 1 pixel = 1 €
+              </span>
             </div>
           </div>
         )}
@@ -509,7 +530,7 @@ export default function HomePage() {
           className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-2">Ils ont rejoint le mur</h3>
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-2">Ils ont <span className="text-gradient">rejoint le mur</span></h3>
             <p className="text-zinc-500 text-sm sm:text-base text-center mb-10 max-w-xl mx-auto font-medium">
               Ces marques ont réservé leur place. Rejoignez-les et affichez votre logo en permanence.
             </p>
@@ -522,7 +543,7 @@ export default function HomePage() {
                       href={ad.link.startsWith('http') ? ad.link : 'https://' + ad.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="glass-card rounded-2xl p-4 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border border-[var(--border)] hover:border-emerald-500/30 hover:shadow-[0_0_32px_-8px_rgba(16,185,129,0.25)] transition-all overflow-hidden"
+                      className="glass-card logo-card rounded-2xl p-4 w-20 h-20 sm:w-24 sm:h-24 flex items-center justify-center border border-[var(--border)] hover:border-emerald-500/35 hover:shadow-[0_0_32px_-6px_rgba(16,185,129,0.3)] overflow-hidden"
                       title={ad.advertiser_name}
                     >
                       {ad.image_url ? (
@@ -548,14 +569,20 @@ export default function HomePage() {
         </section>
 
         {/* Trust copy */}
-        <section className="border-t border-[var(--border)] py-12 sm:py-16">
-          <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
-            <p className="text-xl font-semibold text-zinc-300">
+        <section className="border-t border-[var(--border)] py-12 sm:py-16 relative overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_60%_100%_at_50%_50%,rgba(16,185,129,0.05),transparent_70%)]" />
+          <div className="relative max-w-3xl mx-auto px-4 sm:px-6 text-center">
+            <p className="text-xl sm:text-2xl font-bold text-gradient">
               Votre publicité restera visible pour toujours.
             </p>
-            <p className="mt-2 text-zinc-500 font-medium">
+            <p className="mt-3 text-zinc-500 font-medium">
               Votre marque devient une partie de l&apos;histoire d&apos;Internet.
             </p>
+            <div className="mt-6 flex items-center justify-center gap-4 flex-wrap">
+              <span className="trust-pill">Paiement sécurisé Stripe</span>
+              <span className="trust-pill">Affichage permanent</span>
+              <span className="trust-pill">1 pixel = 1 €</span>
+            </div>
           </div>
         </section>
 
@@ -565,14 +592,14 @@ export default function HomePage() {
           className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
-            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-12">Comment ça marche</h3>
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-12">Comment <span className="text-gradient">ça marche</span></h3>
             <div className="grid sm:grid-cols-3 gap-6 sm:gap-8">
               {HOW_IT_WORKS.map((item) => (
                 <div
                   key={item.step}
-                  className="glass-card rounded-2xl p-6 sm:p-8 border border-[var(--border)] hover:border-emerald-500/20 transition-colors group text-center"
+                  className="glass-card rounded-2xl p-6 sm:p-8 border border-[var(--border)] hover:border-emerald-500/25 transition-all group text-center"
                 >
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 text-emerald-400 font-bold text-xl flex items-center justify-center mx-auto mb-5 group-hover:bg-emerald-500/25 transition-colors">
+                  <div className="w-14 h-14 rounded-2xl step-badge text-emerald-400 font-bold text-xl flex items-center justify-center mx-auto mb-5">
                     {item.step}
                   </div>
                   <h4 className="font-bold text-white mb-2 text-lg">{item.title}</h4>
@@ -589,7 +616,7 @@ export default function HomePage() {
           className="reveal border-t border-[var(--border)] py-14 sm:py-20"
         >
           <div className="max-w-3xl mx-auto px-4 sm:px-6">
-            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Questions fréquentes</h3>
+            <h3 className="text-2xl sm:text-3xl font-bold text-white text-center mb-3">Questions <span className="text-gradient">fréquentes</span></h3>
             <p className="text-zinc-500 text-center text-sm font-medium mb-10">Tout ce que vous devez savoir avant d&apos;acheter.</p>
             <div className="space-y-3">
               {FAQ_ITEMS.map((item, i) => (
@@ -604,11 +631,11 @@ export default function HomePage() {
                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </span>
                   </button>
-                  {faqOpen === i && (
-                    <div className="px-5 sm:px-6 pb-5 pt-1 text-zinc-400 text-sm leading-relaxed border-t border-[var(--border)]">
+                  <div className={`faq-body ${faqOpen === i ? 'faq-body-open' : ''}`}>
+                    <div className="px-5 sm:px-6 pb-5 pt-3 text-zinc-400 text-sm leading-relaxed border-t border-[var(--border)]">
                       {item.a}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -617,26 +644,39 @@ export default function HomePage() {
 
         {/* Contact */}
         <section className="reveal border-t border-[var(--border)] py-14 sm:py-20">
-          <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
-            <h3 className="text-2xl font-bold text-white mb-2">Contact</h3>
-            <p className="text-zinc-500 text-sm font-medium mb-6">
-              Une question ? Écrivez-nous.
-            </p>
-            <a
-              href={`mailto:${CONTACT_EMAIL}`}
-              className="inline-flex items-center gap-2 text-emerald-400 font-semibold hover:text-emerald-300 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-              {CONTACT_EMAIL}
-            </a>
+          <div className="max-w-xl mx-auto px-4 sm:px-6">
+            <div className="contact-card px-8 py-10 text-center">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mx-auto mb-5">
+                <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+              </div>
+              <h3 className="text-2xl font-bold text-white mb-2">Contact</h3>
+              <p className="text-zinc-500 text-sm font-medium mb-6">
+                Une question ? Nous vous répondons rapidement.
+              </p>
+              <a
+                href={`mailto:${CONTACT_EMAIL}`}
+                className="inline-flex items-center gap-2 cta-primary rounded-xl px-6 py-3 font-semibold text-white text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                {CONTACT_EMAIL}
+              </a>
+            </div>
           </div>
         </section>
 
         {/* Legal footer */}
-        <footer className="border-t border-[var(--border)] py-8 sm:py-10">
+        <footer className="border-t border-[var(--border)] py-8 sm:py-10 bg-[var(--bg-elevated)]/30">
           <div className="max-w-5xl mx-auto px-4 sm:px-6">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <p className="text-zinc-500 text-sm font-medium">
+              <p className="text-zinc-500 text-sm font-medium flex items-center gap-2">
+                <span className="w-5 h-5 rounded bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center">
+                  <svg className="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 16 16">
+                    <rect x="1" y="1" width="6" height="6" rx="1" opacity="0.6"/>
+                    <rect x="9" y="1" width="6" height="6" rx="1"/>
+                    <rect x="1" y="9" width="6" height="6" rx="1"/>
+                    <rect x="9" y="9" width="6" height="6" rx="1" opacity="0.4"/>
+                  </svg>
+                </span>
                 © {new Date().getFullYear()} Million Dollar Pixel. Tous droits réservés.
               </p>
               <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
